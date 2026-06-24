@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Pixel Life Planner</title>
+<style>
+  /* ============================================================
+     ТЕМА. Меняешь цвета здесь — меняется всё приложение.
+     Позже сюда же подставишь свой пиксель-арт (см. .scene-art).
+     ============================================================ */
+  :root{
+    --bg1:#0f1219; --bg2:#181420;
+    --card:rgba(255,255,255,.06);
+    --card-line:rgba(255,255,255,.10);
+    --text:#ECECF0; --muted:#9aa0ab;
+    --accent:#7aa2ff;
+    --green:#4ade80; --blue:#60a5fa; --orange:#fb923c; --gray:#9aa0ab;
+    --red:#f87171; --yellow:#facc15;
+    --radius:20px; --card-radius:16px;
+    --nav-h:78px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--text);
+    background:linear-gradient(135deg,var(--bg1),var(--bg2));
+    overflow:hidden;
+    user-select:none; -webkit-user-select:none;
+  }
+  #app{ height:100dvh; display:flex; flex-direction:column; }
+
+  /* Контент текущего экрана (над ним всегда нижняя панель) */
+  #screen{ flex:1; overflow:hidden; position:relative; }
+
+  /* --- Общие элементы --- */
+  .pad{ padding:14px 16px; }
+  .title{ font-size:22px; font-weight:800; letter-spacing:.5px; }
+  .sub{ font-size:12px; color:var(--muted); }
+  .topbar{
+    display:flex; align-items:center; gap:10px; padding:14px 16px 6px;
+  }
+  .topbar .title{ font-size:20px; }
+  .spacer{ flex:1; }
+  .iconbtn{
+    width:38px; height:38px; border:none; border-radius:12px; cursor:pointer;
+    background:var(--card); color:var(--text); font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .iconbtn:active{ transform:scale(.94); }
+  .scroll{ height:100%; overflow:auto; padding:8px 16px calc(var(--nav-h) + 24px); }
+
+  .card{
+    background:var(--card); border:1px solid var(--card-line);
+    border-radius:var(--card-radius); backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px); padding:14px;
+  }
+  .row{ display:flex; align-items:center; gap:12px; }
+  .list-item{ margin-bottom:10px; }
+
+  .badge{ font-size:11px; padding:2px 8px; border-radius:999px; display:inline-block; }
+  .pill-emoji{
+    width:46px; height:46px; border-radius:12px; display:flex;
+    align-items:center; justify-content:center; font-size:24px; flex:none;
+  }
+  .muted{ color:var(--muted); }
+  .empty{ text-align:center; color:var(--muted); padding:60px 20px; }
+  .empty .big{ font-size:40px; }
+
+  .btn{
+    border:none; border-radius:14px; cursor:pointer; font-size:15px; font-weight:600;
+    padding:13px 16px; color:#fff; background:var(--accent); width:100%;
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn.blue{ background:var(--blue); }
+  .delbtn{
+    border:none; background:transparent; color:var(--muted); cursor:pointer;
+    font-size:18px; padding:4px 6px;
+  }
+
+  input,select,textarea{
+    width:100%; font-size:15px; color:var(--text); font-family:inherit;
+    background:rgba(255,255,255,.06); border:1px solid var(--card-line);
+    border-radius:12px; padding:11px 12px; outline:none;
+  }
+  label.field{ display:block; font-size:12px; color:var(--muted); margin:12px 0 6px; }
+
+  /* ============================================================
+     ГЛАВНАЯ СЦЕНА — окно (viewport) по центру, внутри большая сцена.
+     ============================================================ */
+  .scene-wrap{ height:100%; display:flex; flex-direction:column; align-items:center; }
+  .scene-head{ text-align:center; padding:10px 0 8px; }
+  .viewport{
+    position:relative; overflow:hidden;
+    border-radius:var(--radius); border:1px solid var(--card-line);
+    touch-action:none; cursor:grab;
+    background:#000;
+  }
+  .viewport.grabbing{ cursor:grabbing; }
+  .scene{
+    position:absolute; left:50%; top:50%;
+    /* translate(-50%,-50%) центрирует сцену, затем добавляется смещение пользователя */
+    will-change:transform;
+  }
+  /* 📌 ЗДЕСЬ БУДЕТ ТВОЙ ПИКСЕЛЬ-АРТ.
+     Замени фон .scene-art на: background:url('room_scene.png') center/cover;
+     и убери три цветные полосы .band. */
+  .scene-art{ position:absolute; inset:0; display:flex; flex-direction:column; }
+  .band{ flex:1; display:flex; justify-content:center; padding-top:14px;
+         font-size:12px; font-weight:700; color:rgba(255,255,255,.55); letter-spacing:1px; }
+  .band.b1{ background:linear-gradient(#284e38,#1a382e); }
+  .band.b2{ background:linear-gradient(#42331f,#2e231f); }
+  .band.b3{ background:linear-gradient(#242842,#1a1d33); }
+
+  /* Кликабельные зоны поверх сцены (hotspots) */
+  .zones{ position:absolute; inset:0; display:flex; flex-direction:column; }
+  .zone{ flex:1; display:flex; align-items:center; justify-content:center;
+         background:rgba(255,255,255,.04); }
+  .zone .tag{
+    display:flex; gap:6px; align-items:center; font-size:14px; font-weight:700;
+    color:rgba(255,255,255,.9); padding:8px 14px; border-radius:999px;
+    background:rgba(20,20,28,.55); backdrop-filter:blur(6px);
+  }
+  .hint{ font-size:11px; color:var(--muted); text-align:center; padding:8px 16px; }
+
+  /* ============================================================
+     НИЖНЯЯ ПАНЕЛЬ — всегда внизу, поверх всего.
+     ============================================================ */
+  #nav{
+    position:fixed; left:16px; right:16px;
+    bottom:calc(6px + env(safe-area-inset-bottom));
+    height:var(--nav-h);
+    display:flex; align-items:center;
+    background:rgba(20,20,28,.6); backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--card-line); border-radius:var(--radius);
+    z-index:50;
+  }
+  #nav button{
+    flex:1; background:none; border:none; cursor:pointer; color:var(--muted);
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    font-size:11px; padding:8px 0;
+  }
+  #nav button .ico{ font-size:20px; }
+  #nav button.active{ color:var(--accent); }
+
+  /* Сегментированный фильтр */
+  .seg{ display:flex; background:rgba(255,255,255,.06); border-radius:12px; padding:3px; margin:14px 0 6px; }
+  .seg button{
+    flex:1; border:none; background:none; color:var(--muted); cursor:pointer;
+    padding:8px; border-radius:9px; font-size:14px; font-weight:600;
+  }
+  .seg button.active{ background:var(--accent); color:#fff; }
+
+  /* ============================================================
+     МОДАЛКИ (sheets) — добавление/детали/инструмент.
+     ============================================================ */
+  #modal{ position:fixed; inset:0; z-index:100; display:none; }
+  #modal.open{ display:block; }
+  #modal .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.5); }
+  #modal .sheet{
+    position:absolute; left:0; right:0; bottom:0;
+    background:linear-gradient(135deg,#171a22,#1d1828);
+    border-top-left-radius:24px; border-top-right-radius:24px;
+    border-top:1px solid var(--card-line);
+    padding:18px 18px calc(24px + env(safe-area-inset-bottom));
+    max-height:88dvh; overflow:auto;
+  }
+  .sheet-head{ display:flex; align-items:center; margin-bottom:6px; }
+  .sheet-head .title{ font-size:18px; }
+  .linkbtn{ background:none; border:none; color:var(--accent); font-size:16px; cursor:pointer; padding:6px; }
+  .linkbtn:disabled{ color:var(--muted); }
+
+  /* Чат */
+  .chat-wrap{ height:100%; display:flex; flex-direction:column; }
+  .chat-scroll{ flex:1; overflow:auto; padding:14px 16px; }
+  .bubble{ max-width:78%; padding:11px 13px; border-radius:16px; margin-bottom:10px; font-size:15px; line-height:1.35; }
+  .bubble.user{ margin-left:auto; background:var(--accent); color:#fff; }
+  .bubble.ai{ margin-right:auto; background:var(--card); border:1px solid var(--card-line); }
+  .chat-input{ display:flex; gap:10px; padding:10px 14px calc(var(--nav-h) + 16px); align-items:flex-end; }
+  .chat-input textarea{ resize:none; max-height:110px; }
+  .sendbtn{ flex:none; width:46px; height:46px; border-radius:14px; border:none; cursor:pointer;
+            background:var(--accent); color:#fff; font-size:22px; }
+  .sendbtn:disabled{ opacity:.4; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="screen"></div>
+  </div>
+
+  <!-- Нижняя навигация -->
+  <nav id="nav"></nav>
+
+  <!-- Контейнер модальных окон -->
+  <div id="modal"><div class="backdrop"></div><div class="sheet"></div></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Pixel Life Planner — веб-версия (один файл, без библиотек).
+   Данные живут в памяти браузера и сбрасываются при перезагрузке —
+   для базовой версии это нормально. Позже легко сохранить в localStorage.
+   ===================================================================== */
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+const $ = (sel, root = document) => root.querySelector(sel);
+
+// ---------- Справочники статусов / приоритетов ----------
+const PLANT_STATUS = {
+  good:      { title:"В порядке",   emoji:"🌿", color:"var(--green)" },
+  needsWater:{ title:"Нужен полив", emoji:"💧", color:"var(--blue)" },
+  sick:      { title:"Болеет",      emoji:"🩹", color:"var(--orange)" },
+  unknown:   { title:"Неизвестно",  emoji:"❓", color:"var(--gray)" },
+};
+const PRIORITY = {
+  low:    { title:"Низкий",  color:"var(--gray)" },
+  medium: { title:"Средний", color:"var(--yellow)" },
+  high:   { title:"Высокий", color:"var(--red)" },
+};
+
+// ---------- Хранилище ----------
+const store = {
+  plants: [
+    { id:uid(), name:"Монстера", status:"good",       lastWatered: Date.now()-2*864e5, notes:"Любит свет" },
+    { id:uid(), name:"Кактус",   status:"needsWater", lastWatered: Date.now()-10*864e5, notes:"" },
+  ],
+  tasks: [
+    { id:uid(), title:"Полить растения",     priority:"medium", due:null, done:false },
+    { id:uid(), title:"Сделать бэкап базы",  priority:"high",   due:null, done:false },
+    { id:uid(), title:"Разобрать задачи",    priority:"low",    due:null, done:true  },
+  ],
+  chat: [ { role:"ai", text:"Привет! Я помощник. Пока работаю в демо-режиме." } ],
+};
+
+// ---------- Состояние навигации ----------
+const TABS = [
+  { id:"home",    ico:"🏠", label:"Сцена" },
+  { id:"plants",  ico:"🌱", label:"Растения" },
+  { id:"planner", ico:"✅", label:"Планнер" },
+  { id:"aichat",  ico:"💬", label:"AI Chat" },
+];
+const state = {
+  screen: "home",       // home | plants | planner | tools | aichat
+  plannerFilter: "today",
+  scene: { x:0, y:0 },  // смещение сцены сохраняется между переходами
+};
+
+// ===================== РЕНДЕР НИЖНЕЙ ПАНЕЛИ =====================
+function renderNav(){
+  const nav = $("#nav");
+  nav.innerHTML = TABS.map(t => {
+    const active = (state.screen === t.id) || (state.screen === "tools" && t.id === "home");
+    return `<button data-tab="${t.id}" class="${active ? "active":""}">
+      <span class="ico">${t.ico}</span><span>${t.label}</span></button>`;
+  }).join("");
+  nav.querySelectorAll("button").forEach(b => {
+    b.onclick = () => go(b.dataset.tab);
+  });
+}
+
+function go(screen){ state.screen = screen; render(); }
+
+// ===================== ГЛАВНЫЙ РЕНДЕР =====================
+function render(){
+  renderNav();
+  const el = $("#screen");
+  switch(state.screen){
+    case "home":    el.innerHTML = homeHTML();    afterHome();    break;
+    case "plants":  el.innerHTML = plantsHTML();  afterPlants();  break;
+    case "planner": el.innerHTML = plannerHTML(); afterPlanner(); break;
+    case "tools":   el.innerHTML = toolsHTML();   afterTools();   break;
+    case "aichat":  el.innerHTML = aichatHTML();  afterAIChat();  break;
+  }
+}
+
+// ===================== ЭКРАН: ГЛАВНАЯ СЦЕНА =====================
+function homeHTML(){
+  return `
+  <div class="scene-wrap">
+    <div class="scene-head">
+      <div class="title">Мой дом</div>
+      <div class="sub">Двигай сцену пальцем</div>
+    </div>
+
+    <div class="viewport" id="viewport">
+      <div class="scene" id="scene">
+        <!-- Фон сцены (заглушка). Замени на свой PNG в .scene-art -->
+        <div class="scene-art">
+          <div class="band b1">ВЕРХ — Растения</div>
+          <div class="band b2">КАБИНЕТ — Планнер</div>
+          <div class="band b3">НИЗ — Инструменты</div>
+        </div>
+        <!-- Кликабельные зоны -->
+        <div class="zones">
+          <div class="zone" data-zone="plants"><span class="tag">👆 Растения</span></div>
+          <div class="zone" data-zone="planner"><span class="tag">👆 Кабинет / Планнер</span></div>
+          <div class="zone" data-zone="tools"><span class="tag">👆 Инструменты</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">Верх — растения · Центр — планнер · Низ — инструменты</div>
+  </div>`;
+}
+
+// Размер всей сцены (она больше окна). Подгони под свой PNG.
+const SCENE_W = 1100, SCENE_H = 1700;
+
+function afterHome(){
+  const viewport = $("#viewport");
+  const scene = $("#scene");
+
+  // Размер окна (viewport): ширина почти на экран, высота — часть экрана.
+  const wrap = $(".scene-wrap");
+  const availH = wrap.clientHeight - 130; // минус заголовок и подсказка
+  const vpW = Math.min(window.innerWidth - 32, 380);
+  const vpH = Math.max(260, availH);
+  viewport.style.width  = vpW + "px";
+  viewport.style.height = vpH + "px";
+
+  scene.style.width  = SCENE_W + "px";
+  scene.style.height = SCENE_H + "px";
+
+  // Ограничение смещения, чтобы сцену нельзя было утащить за край.
+  const clamp = (x, y) => {
+    const maxX = Math.max(0, (SCENE_W - vpW) / 2);
+    const maxY = Math.max(0, (SCENE_H - vpH) / 2);
+    return {
+      x: Math.min(Math.max(x, -maxX), maxX),
+      y: Math.min(Math.max(y, -maxY), maxY),
+    };
+  };
+  const apply = () => {
+    scene.style.transform =
+      `translate(-50%,-50%) translate(${state.scene.x}px, ${state.scene.y}px)`;
+  };
+  // восстановить сохранённое смещение (с учётом нового размера окна)
+  state.scene = clamp(state.scene.x, state.scene.y);
+  apply();
+
+  // --- Перетаскивание (работает мышью и пальцем) ---
+  let dragging = false, moved = false;
+  let startX = 0, startY = 0, baseX = 0, baseY = 0, zoneAtStart = null;
+
+  viewport.addEventListener("pointerdown", (e) => {
+    dragging = true; moved = false;
+    startX = e.clientX; startY = e.clientY;
+    baseX = state.scene.x; baseY = state.scene.y;
+    // какая зона была под пальцем в начале (для распознавания тапа)
+    const z = e.target.closest("[data-zone]");
+    zoneAtStart = z ? z.dataset.zone : null;
+    viewport.classList.add("grabbing");
+    viewport.setPointerCapture(e.pointerId);
+  });
+
+  viewport.addEventListener("pointermove", (e) => {
+    if(!dragging) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if(Math.abs(dx) + Math.abs(dy) > 8) moved = true; // отличаем тап от перетаскивания
+    state.scene = clamp(baseX + dx, baseY + dy);
+    apply();
+  });
+
+  const end = () => {
+    if(!dragging) return;
+    dragging = false;
+    viewport.classList.remove("grabbing");
+    // Если не двигали и начали на зоне — это тап: переходим на экран.
+    if(!moved && zoneAtStart) go(zoneAtStart);
+  };
+  viewport.addEventListener("pointerup", end);
+  viewport.addEventListener("pointercancel", end);
+}
+
+// ===================== ЭКРАН: РАСТЕНИЯ =====================
+function plantsHTML(){
+  const items = store.plants.length ? store.plants.map(plantCard).join("")
+    : `<div class="empty"><div class="big">🌱</div><div>Пока нет растений</div>
+       <div class="sub">Нажми + чтобы добавить</div></div>`;
+  return `
+    <div class="topbar">
+      <div class="title">Растения</div><div class="spacer"></div>
+      <button class="iconbtn" id="addPlant">＋</button>
+    </div>
+    <div class="scroll">${items}</div>`;
+}
+function plantCard(p){
+  const s = PLANT_STATUS[p.status];
+  return `
+  <div class="card list-item row" data-plant="${p.id}" style="cursor:pointer">
+    <div class="pill-emoji" style="background:rgba(255,255,255,.06)">${s.emoji}</div>
+    <div style="flex:1">
+      <div style="font-weight:700">${esc(p.name)}</div>
+      <div class="sub">${s.title}</div>
+    </div>
+    <button class="delbtn" data-del-plant="${p.id}">✕</button>
+  </div>`;
+}
+function afterPlants(){
+  $("#addPlant").onclick = openAddPlant;
+  $("#screen").querySelectorAll("[data-plant]").forEach(c => {
+    c.onclick = (e) => {
+      if(e.target.closest("[data-del-plant]")) return;
+      openPlantDetail(c.dataset.plant);
+    };
+  });
+  $("#screen").querySelectorAll("[data-del-plant]").forEach(b => {
+    b.onclick = () => { store.plants = store.plants.filter(p => p.id !== b.dataset.delPlant); render(); };
+  });
+}
+
+// ===================== ЭКРАН: ПЛАННЕР =====================
+function plannerHTML(){
+  const f = state.plannerFilter;
+  const visible = filterTasks(f);
+  const items = visible.length ? visible.map(taskRow).join("")
+    : `<div class="empty"><div class="big">✅</div><div>Задач нет</div>
+       <div class="sub">Нажми + чтобы создать</div></div>`;
+  const seg = [["today","Сегодня"],["upcoming","Скоро"],["completed","Готово"]]
+    .map(([id,t]) => `<button data-filter="${id}" class="${f===id?"active":""}">${t}</button>`).join("");
+  return `
+    <div class="topbar">
+      <div class="title">Планнер</div><div class="spacer"></div>
+      <button class="iconbtn" id="addTask">＋</button>
+    </div>
+    <div style="padding:0 16px"><div class="seg">${seg}</div></div>
+    <div class="scroll">${items}</div>`;
+}
+function filterTasks(f){
+  const now = Date.now(), startToday = new Date(); startToday.setHours(0,0,0,0);
+  const isToday = (d) => d!=null && new Date(d).toDateString() === new Date().toDateString();
+  if(f==="completed") return store.tasks.filter(t => t.done);
+  if(f==="upcoming")  return store.tasks.filter(t => !t.done && t.due!=null && t.due>now && !isToday(t.due));
+  // today: невыполненные, без даты ИЛИ на сегодня/просрочено
+  return store.tasks.filter(t => !t.done && (t.due==null || isToday(t.due) || t.due < now));
+}
+function taskRow(t){
+  const p = PRIORITY[t.priority];
+  const due = t.due ? new Date(t.due).toLocaleDateString("ru-RU",{day:"numeric",month:"short"}) : "";
+  return `
+  <div class="card list-item row" data-task="${t.id}">
+    <button class="delbtn" data-check="${t.id}" style="font-size:22px;color:${t.done?"var(--green)":"var(--muted)"}">
+      ${t.done ? "☑" : "☐"}</button>
+    <div style="flex:1">
+      <div style="${t.done?"text-decoration:line-through;color:var(--muted)":""}">${esc(t.title)}</div>
+      <div style="margin-top:4px">
+        <span class="badge" style="background:color-mix(in srgb, ${p.color} 25%, transparent);color:${p.color}">${p.title}</span>
+        ${due?`<span class="sub" style="margin-left:8px">${due}</span>`:""}
+      </div>
+    </div>
+    <button class="delbtn" data-del-task="${t.id}">✕</button>
+  </div>`;
+}
+function afterPlanner(){
+  $("#addTask").onclick = openAddTask;
+  $("#screen").querySelectorAll("[data-filter]").forEach(b => {
+    b.onclick = () => { state.plannerFilter = b.dataset.filter; render(); };
+  });
+  $("#screen").querySelectorAll("[data-check]").forEach(b => {
+    b.onclick = () => {
+      const t = store.tasks.find(x => x.id === b.dataset.check);
+      if(t){ t.done = !t.done; render(); }
+    };
+  });
+  $("#screen").querySelectorAll("[data-del-task]").forEach(b => {
+    b.onclick = () => { store.tasks = store.tasks.filter(t => t.id !== b.dataset.delTask); render(); };
+  });
+}
+
+// ===================== ЭКРАН: ИНСТРУМЕНТЫ =====================
+const TOOLS = [["🎯","Goals"],["🔁","Habits"],["💳","Finance"],["📝","Notes"],["📅","Calendar"]];
+function toolsHTML(){
+  const grid = TOOLS.map(([e,t]) => `
+    <div class="card" data-tool="${t}" style="cursor:pointer;text-align:center;padding:22px 10px">
+      <div style="font-size:30px">${e}</div>
+      <div style="font-weight:700;margin-top:8px">${t}</div>
+    </div>`).join("");
+  return `
+    <div class="topbar">
+      <button class="iconbtn" id="backHome">‹</button>
+      <div class="title">Инструменты</div>
+    </div>
+    <div class="scroll">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${grid}</div>
+    </div>`;
+}
+function afterTools(){
+  $("#backHome").onclick = () => go("home");
+  $("#screen").querySelectorAll("[data-tool]").forEach(c => {
+    c.onclick = () => openSheet(`
+      <div class="sheet-head"><div class="title">${c.dataset.tool}</div><div class="spacer"></div>
+        <button class="linkbtn" data-close>Готово</button></div>
+      <div class="empty"><div class="big">🚧</div><div>Раздел в разработке</div></div>`);
+  });
+}
+
+// ===================== ЭКРАН: AI ЧАТ =====================
+function aichatHTML(){
+  const msgs = store.chat.map(m => `<div class="bubble ${m.role==="user"?"user":"ai"}">${esc(m.text)}</div>`).join("");
+  return `
+    <div class="chat-wrap">
+      <div class="topbar"><div class="title">AI Chat</div></div>
+      <div class="chat-scroll" id="chatScroll">${msgs}<div id="typing"></div></div>
+      <div class="chat-input">
+        <textarea id="chatInput" rows="1" placeholder="Сообщение…"></textarea>
+        <button class="sendbtn" id="sendBtn">↑</button>
+      </div>
+    </div>`;
+}
+function afterAIChat(){
+  const input = $("#chatInput"), btn = $("#sendBtn"), scroll = $("#chatScroll");
+  scroll.scrollTop = scroll.scrollHeight;
+  input.oninput = () => { input.style.height="auto"; input.style.height=Math.min(input.scrollHeight,110)+"px"; };
+  const send = () => {
+    const text = input.value.trim();
+    if(!text) return;
+    store.chat.push({ role:"user", text });
+    input.value=""; input.style.height="auto";
+    render();
+    // Демо-ответ (здесь позже подключишь реальный API).
+    $("#typing").innerHTML = `<div class="bubble ai">печатает…</div>`;
+    $("#chatScroll").scrollTop = $("#chatScroll").scrollHeight;
+    setTimeout(() => {
+      store.chat.push({ role:"ai", text:`🤖 (демо) Понял: «${text}». Здесь позже будет ответ настоящего ИИ.` });
+      render();
+    }, 600);
+  };
+  btn.onclick = send;
+  input.onkeydown = (e) => { if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); send(); } };
+}
+
+// ===================== МОДАЛКИ =====================
+function openSheet(html){
+  const modal = $("#modal");
+  $(".sheet", modal).innerHTML = html;
+  modal.classList.add("open");
+  $(".backdrop", modal).onclick = closeSheet;
+  modal.querySelectorAll("[data-close]").forEach(b => b.onclick = closeSheet);
+}
+function closeSheet(){ $("#modal").classList.remove("open"); }
+
+function openAddPlant(){
+  const statusOpts = Object.entries(PLANT_STATUS)
+    .map(([k,v]) => `<option value="${k}">${v.title}</option>`).join("");
+  openSheet(`
+    <div class="sheet-head">
+      <button class="linkbtn" data-close>Отмена</button><div class="spacer"></div>
+      <div class="title">Новое растение</div><div class="spacer"></div>
+      <button class="linkbtn" id="savePlant">Добавить</button>
+    </div>
+    <label class="field">Название</label><input id="pName" placeholder="Например, Фикус">
+    <label class="field">Статус</label><select id="pStatus">${statusOpts}</select>
+    <label class="field">Заметки</label><textarea id="pNotes" rows="2"></textarea>`);
+  const save = $("#savePlant");
+  const name = $("#pName");
+  save.disabled = true;
+  name.oninput = () => save.disabled = !name.value.trim();
+  save.onclick = () => {
+    store.plants.unshift({ id:uid(), name:name.value.trim(),
+      status:$("#pStatus").value, lastWatered:null, notes:$("#pNotes").value.trim() });
+    closeSheet(); render();
+  };
+}
+
+function openPlantDetail(id){
+  const p = store.plants.find(x => x.id === id); if(!p) return;
+  const s = PLANT_STATUS[p.status];
+  const last = p.lastWatered ? new Date(p.lastWatered).toLocaleDateString("ru-RU") : "—";
+  openSheet(`
+    <div class="sheet-head"><div class="title">${esc(p.name)}</div><div class="spacer"></div>
+      <button class="linkbtn" data-close>Готово</button></div>
+    <div class="card row" style="margin-top:6px">
+      <div style="font-size:24px">${s.emoji}</div><div style="font-weight:700">${s.title}</div>
+    </div>
+    <div class="card row" style="margin-top:10px">
+      <div class="muted">Последний полив</div><div class="spacer"></div><div>${last}</div>
+    </div>
+    <button class="btn blue" id="water" style="margin-top:12px">💧 Полито сегодня</button>`);
+  $("#water").onclick = () => {
+    p.lastWatered = Date.now(); p.status = "good";
+    closeSheet(); render();
+  };
+}
+
+function openAddTask(){
+  const prioOpts = Object.entries(PRIORITY)
+    .map(([k,v]) => `<option value="${k}" ${k==="medium"?"selected":""}>${v.title}</option>`).join("");
+  openSheet(`
+    <div class="sheet-head">
+      <button class="linkbtn" data-close>Отмена</button><div class="spacer"></div>
+      <div class="title">Новая задача</div><div class="spacer"></div>
+      <button class="linkbtn" id="saveTask">Сохранить</button>
+    </div>
+    <label class="field">Название</label><input id="tTitle" placeholder="Что нужно сделать">
+    <label class="field">Приоритет</label><select id="tPrio">${prioOpts}</select>
+    <label class="field">Срок (необязательно)</label><input id="tDue" type="date">`);
+  const save = $("#saveTask"), title = $("#tTitle");
+  save.disabled = true;
+  title.oninput = () => save.disabled = !title.value.trim();
+  save.onclick = () => {
+    const dueVal = $("#tDue").value;
+    store.tasks.unshift({ id:uid(), title:title.value.trim(), priority:$("#tPrio").value,
+      due: dueVal ? new Date(dueVal).getTime() : null, done:false });
+    closeSheet(); render();
+  };
+}
+
+// ---------- утилита экранирования ----------
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// Перерисовать главную при повороте/ресайзе (чтобы окно сцены пересчиталось)
+window.addEventListener("resize", () => { if(state.screen==="home") render(); });
+
+// Старт
+render();
+</script>
+</body>
+</html>
